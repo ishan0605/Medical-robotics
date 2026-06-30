@@ -1,49 +1,88 @@
-# Needle Insertion In A Brain Tumour Surgery
+# Franka Emika 3D Slicer Integration
 
-## Description
-This project replicates, to an extent, a surgical robot system similar to ROSA ONE, which is utilized for minimally invasive brain surgery. Our goal is to insert a needle (or any similar tool such as suction needle or Da Vinci's clip appliers) to a surgically exposed tumour. It is designed to be used during the process of craniotomy while [removing a brain tumour](https://www.youtube.com/watch?v=ho2XWlJZDzg&t=2s).
+This project demonstrates some possibilities of using 3D Slicer for tracking and control
+of the Franka Emika robot arm
 
-My project is implementated through Frank Emika Panda Robot Arm in University of Toronto's Robotics Lab. Our code uses Eigen and libfranka libraries to perform algebraic computations of vectors and matrices and control the robot arm. We are using a 25cm long by 3mm thin needle for the extension to the Franka Hand. Our testing environment includes lego bricks to indicate the tumour location and setup the restricted zones around the tumour, and a skull mold to hold the lego setup.
+## Overview
 
-One of the biggest challenges faced during the project was to perform the linear algebra calculations to compute the transformation matrices and direction vectors. After speaking with the Professor and the TAs, I was able to come up with a clever approach of setting the transformation matrix of the final poses. Another challenge faced during the development process was that robot access was required in order to test the code.
+The project draws some ideas from a Slicer
+[plugin](https://www.slicer.org/wiki/Documentation/Nightly/Extensions/LightWeightRobotIGT)
+for the Kuka LightWeightRobot. We setup a model of the robot workspace in 3D slicer then
+we setup a tracker for the robot end effector relative to it's workspace using registration
+methods and we show the realtime position (and pose) of the robot end effector in 3D Slicer.
+Also, we set up a workflow to select workspace positions in 3D slicer and make the robot
+move to those positions in the physical workspace.
+An improvement to this project would be using a model of the whole robot in 3D slicer as
+the plugin referenced above does.
 
-One of the things I would like to work on in the future is to implement this project on a ROS to improve development effeciency. Another small feature I would like to add was to add sound feedback when the robot detects the restricted zone (better than displaying the message on the console), that way the operator can focus on operating the robot rather than having to look back at the console everytime for indications.
+### Key Features
 
-Please find below instruction to configure the robot, run the code, and execute the project.
+- Realtime tracking of the robot end effector position *relative* to the robot workspace.
+- Moving the robot to points in the physical workspace selected from the workspace model in
+3D Slicer.
 
-## Robot configuration
-1. Open the Franka Desk app.
-2. Go to Settings > End effector.
-3. Select end effector as Franka Hand.
-4. Add to the Mass and Transformation Matrix from Flange to End-Effector according to the mass and dimensions of the needle extension. (For our testing we used a 25 cm long needle and weighing about 10 grams).
-5. Apply the changes.
-6. Click on Homing to home the Franka Hand (fingers).
-7. Attach the needle to the Franka Hand.
-8. Setup the environment as outlined in the `instructions_and_testing.pdf`.
-   
-## Run the code
-1. Ensure you have the required libraries and files given in the scratchpad/csc496 folder.
-2. Open the terminal and cd to the csc496 folder.
-3. Add `brain_insertion` to the `CMakeList.txt` to build and compile the file.
-4. cd to build folder. If there is no build folder `mkdir build` then cd
-5. `cmake ..`
-6. `make`
-7. Run the `run_brain_insertion` executable with the IP of the Franka Robot. For example: `./run_brain_insertion 192.168.1.107`
-Note: Please refer to code documentation (comments) for further details about how the code works
+## Our Setup
 
-## Interacting through the console.
-**NOTE**: Ensure that the emergency switch is at-hand at all times to prevent any injuries to the operator, patient, or the robot.
-1. Point registration (ensure to record the points with accuracy as it might affect the calculations and decisions made by the robot)
-   * First, enter the x, y, and z voxel coordinates of the point to registration
-   * Then move the needle tip to the point
-   * Then press Enter to collect the base frame coordinate of the point
-   * Repeat this for 3 other points (it is hardcoded right now but can later be changed to take input from a file)
-2. Enter x, y, and z coordinates of the tumour in image/voxel space
-3. Selecting a valid entry point
-   * Move the robot to a desired entry point and press Enter
-   * If the screen(console) displays "NO GO!", please select another entry point and press Enter.
-   * Repeat until screen(console) displays "GOOD TO GO"
-4. Wait till the needle insertion is complete and the code exits.
+In development, we had a Franka Emika robot arm, a realtime linux box connected to it for
+control of the robot using the [libfranka](https://frankaemika.github.io/docs/overview.html)
+library, and we had a third computer (a laptop) running the 3D slicer software. We connected
+the laptop to the realtime linux machine using an ethernet cable for high frequency communication
+and safety (WiFi could be unsafe).
 
-## Credits
-Project by Ishan Gupta under supervision and support of Professor Lueder-Kahrs. 
+## Software Used
+
+- [3D Slicer](https://www.slicer.org/)
+- [SlicerOpenIGTLink](https://github.com/openigtlink/SlicerOpenIGTLink): a 3D Slicer plugin.
+- [OpenIGTLink](https://github.com/openigtlink/OpenIGTLink): communication interface.
+- [ZeroMQ](https://zeromq.org/): messaging library.
+- [libfranka](https://frankaemika.github.io/docs/overview.html)
+
+## Implementation
+
+There are 3 C++ files in the program
+
+- `3dslicer.cpp`: This file contains the code that is run on the linux realtime kernel.
+    It  functions to control the robot using the libfranka library. It also communicates 
+    with programs on the laptop sending the (transformed) robot positions and recieving 
+    workspace positions to move the robot to and moves the robot.
+
+- `track_model.cxx`: This file contains the code that performs the tracking of the robot end effector.
+    The main ideas implemented here are gotten from the examples in the OpenIGTLink repository. The
+    program continually recieves the robot EE position using zmq and sends them to 3D Slicer using the
+    OpenIGTLink protocol. This program runs on the laptop.
+
+- `send_commands.cxx`: This file contains the code that sends workspace points to the program running on the
+    realtime linux machine. The main ideas implemented here are gotten from the examples in the OpenIGTLink
+    repository. This program listens to 3D slicer for points, receives them from 3D slicer using OpenIGTLink and
+    sends them to the program on the linux kernel using zmq.
+
+## Running the Programs
+
+- Compile the C++ files on their respective machines as described above.
+- When the robot is running in fci mode, run `./final_project <host>` with the ip address of the robot.
+- Follow the steps and register points in the workspace
+- Then run `./Tracker <port>` and `./Reciever <port>` with different free ports.
+- Open 3D Slicer and install the SlicerOpenIGTLink plugin then
+    [create connections](https://www.slicer.org/wiki/Documentation/Nightly/Extensions/LightWeightRobotIGT)
+    to the appropriate ports
+- Load the workspace model into 3D slicer.
+- You should see the tracker in the workspace in 3D slicer and you should be able to send points and see the
+robot move.
+
+## Note on Mathematics
+
+Notice that in this project, we transform points from the image space to the physical space (when moving the
+robot to desired points) and we transform physical space points to image space points. One way to do this
+would be to perform the registration algorithm twice but that could be cumbersome. So we use the same
+$R$ and $t$ in the two tranformations.
+
+From image to physical: $y = Rx + t$ (the usual transformation)
+
+From physical to image: $x = R^{-1}(y-t)$. We get this by solving for $x$ in the registration algorithm.
+We know that this is well defined and $R$ has an inverse because it is a memeber of the special orthogonal
+group since it is a rotation matrix.
+
+Also, we are able to get the transformed robot poses into the workspace by using the same method to transform
+the physical robot pose $$R_{image} = R^{-1} \times R_{phy}$$
+
+# Extension with graduate students and friend
